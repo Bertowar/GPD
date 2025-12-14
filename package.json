@@ -1,0 +1,31 @@
+{
+  "name": "gpd-system-8.0",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0&deps=react@18.2.0",
+    "react-router-dom": "6.22.3",
+    "@tanstack/react-query": "5.28.4",
+    "lucide-react": "0.344.0",
+    "recharts": "2.12.3",
+    "uuid": "9.0.1",
+    "@supabase/supabase-js": "2.39.3",
+    "cors": "2.8.5",
+    "pg": "8.11.3",
+    "dotenv": "16.4.5",
+    "express": "4.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

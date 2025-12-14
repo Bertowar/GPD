@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>PlastPack ERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#f0f9ff',
+                100: '#e0f2fe',
+                500: '#0ea5e9',
+                600: '#0284c7',
+                700: '#0369a1',
+                900: '#0c4a6e',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Ajuste Global de Inputs */
+      /* Removemos o !important do background-color para permitir bg-transparent nas classes do Tailwind */
+      input, select, textarea {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+      }
+      
+      /* Aplica fundo branco apenas se não tiver classe de transparência explícita */
+      input:not(.bg-transparent), select:not(.bg-transparent), textarea:not(.bg-transparent) {
+        background-color: #ffffff;
+      }
+
+      /* Remove estilo de autocompletar amarelo/azul do navegador */
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover, 
+      input:-webkit-autofill:focus, 
+      input:-webkit-autofill:active{
+          -webkit-box-shadow: 0 0 0 30px white inset !important;
+          -webkit-text-fill-color: black !important;
+      }
+
+      /* ESTILO DO DATE PICKER */
+      /* Torna o input relativo para posicionamento do indicador */
+      input[type="date"] {
+        position: relative;
+      }
+      
+      /* Expande a área clicável do calendário para cobrir todo o input, mas deixa invisível */
+      /* Isso permite que o clique no ícone customizado (que está visualmente embaixo) ative o picker nativo */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        background: transparent;
+        color: transparent;
+      }
+
+      body {
+        background-color: #f8fafc;
+        color: #0f172a;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?deps=react@18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0&deps=react@18.2.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.3?deps=react@18.2.0,react-dom@18.2.0",
+    "@tanstack/react-query": "https://esm.sh/@tanstack/react-query@5.28.4?deps=react@18.2.0,react-dom@18.2.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0",
+    "recharts": "https://esm.sh/recharts@2.12.3?deps=react@18.2.0,react-dom@18.2.0",
+    "uuid": "https://esm.sh/uuid@9.0.1",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.3",
+    "cors": "https://esm.sh/cors@2.8.5",
+    "pg": "https://esm.sh/pg@8.11.3",
+    "dotenv": "https://esm.sh/dotenv@16.4.5",
+    "express": "https://esm.sh/express@4.18.3"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+  </body>
+</html>
