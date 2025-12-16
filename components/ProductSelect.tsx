@@ -6,6 +6,7 @@ interface ProductSelectProps {
   products: Product[];
   value: number | null;
   onChange: (value: number | null) => void;
+  onConfirm?: () => void; // Optional callback for UX focus management
   error?: string;
   hideLabel?: boolean;
   className?: string;
@@ -16,6 +17,7 @@ export const ProductSelect: React.FC<ProductSelectProps> = ({
   products, 
   value, 
   onChange, 
+  onConfirm,
   error, 
   hideLabel = false, 
   className = '', 
@@ -40,8 +42,8 @@ export const ProductSelect: React.FC<ProductSelectProps> = ({
   }, [wrapperRef]);
 
   const filteredProducts = products.filter(p =>
-    p.produto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.produto && p.produto.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (p.descricao && p.descricao.toLowerCase().includes(searchTerm.toLowerCase())) ||
     p.codigo.toString().includes(searchTerm)
   );
 
@@ -51,17 +53,39 @@ export const ProductSelect: React.FC<ProductSelectProps> = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (disabled) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setIsOpen(!isOpen);
+      }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && filteredProducts.length > 0) {
+          e.preventDefault();
+          onChange(filteredProducts[0].codigo);
+          setIsOpen(false);
+          setSearchTerm('');
+          if (onConfirm) {
+              onConfirm();
+          }
+      }
+  };
+
   return (
     <div className="flex flex-col space-y-1 relative" ref={wrapperRef}>
       {!hideLabel && <label className="text-sm font-semibold text-slate-700">Produto *</label>}
       
       <div 
-        className={`px-3 py-2 bg-white border rounded-lg flex items-center justify-between transition-all ${
+        className={`px-3 py-2 bg-white border rounded-lg flex items-center justify-between transition-all outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 ${
           disabled ? 'bg-slate-100 cursor-not-allowed text-slate-400' : 'cursor-pointer hover:border-brand-400'
         } ${
           error ? 'border-red-500' : 'border-slate-300'
         } ${isOpen ? 'ring-2 ring-brand-500 border-brand-500' : ''} ${className}`}
         onClick={handleToggle}
+        onKeyDown={handleKeyDown}
+        tabIndex={disabled ? -1 : 0}
       >
         <span className={`block truncate ${!selectedProduct ? 'text-slate-400' : (disabled ? 'text-slate-500' : 'text-slate-900')}`}>
           {selectedProduct 
@@ -82,6 +106,7 @@ export const ProductSelect: React.FC<ProductSelectProps> = ({
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-brand-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
               />
               {searchTerm && (
                 <button 
@@ -108,6 +133,7 @@ export const ProductSelect: React.FC<ProductSelectProps> = ({
                     onChange(product.codigo);
                     setIsOpen(false);
                     setSearchTerm('');
+                    if (onConfirm) onConfirm();
                   }}
                 >
                   <div className="flex justify-between items-baseline mb-1">

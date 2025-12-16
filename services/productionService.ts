@@ -3,6 +3,7 @@ import { ProductionEntry, AppAlert, ProductionOrder, MachineStatus, DashboardSum
 import { SYSTEM_OPERATOR_ID } from '../constants';
 import { formatError } from './utils';
 import { processStockDeduction, processScrapGeneration } from './inventoryService';
+import { fetchSettings } from './masterDataService';
 
 // --- Helpers ---
 
@@ -86,25 +87,76 @@ export const saveEntry = async (entry: ProductionEntry): Promise<void> => {
 
 const handleQualitySideEffects = async (entry: ProductionEntry): Promise<void> => {
     const isDraft = entry.metaData?.is_draft === true;
-    if (isDraft || entry.qtyDefect <= 0) return;
+    if (isDraft) return;
 
-    const total = entry.qtyOK + entry.qtyDefect;
-    if (total === 0) return;
+    // Fetch Dynamic Thresholds
+    const settings = await fetchSettings();
+    const limitScrap = (settings.maxScrapRate || 5) / 100;
+    const limitSludge = (settings.maxSludgeRate || 2) / 100;
 
-    const defectRate = entry.qtyDefect / total;
-    
-    if (defectRate > 0.05) {
-        const alertId = crypto.randomUUID();
-        await saveAlert({ 
-            id: alertId, 
-            type: 'quality', 
-            title: 'Refugo Alto Detectado', 
-            message: `Taxa de ${(defectRate * 100).toFixed(1)}% na máquina ${entry.machineId}.`, 
-            severity: 'high', 
-            createdAt: Date.now(), 
-            isRead: false, 
-            relatedEntryId: entry.id 
-        });
+    // A) EXTRUSION LOGIC (Separated Sludge vs Refile)
+    if (entry.metaData?.extrusion) {
+        const borra = Number(entry.metaData.extrusion.borra || 0);
+        const refile = Number(entry.metaData.extrusion.refile || 0);
+        const producedWeight = Number(entry.metaData.bobbin_weight || 0);
+        
+        // Total Input Weight = Output (Bobbin) + Waste (Borra + Refile)
+        const totalWeight = producedWeight + borra + refile;
+
+        if (totalWeight > 0) {
+            // Check 1: Borra (Sludge/Loss) - HIGH SEVERITY
+            const sludgeRate = borra / totalWeight;
+            if (sludgeRate > limitSludge) {
+                const alertId = crypto.randomUUID();
+                await saveAlert({
+                    id: alertId,
+                    type: 'quality',
+                    title: 'Perda Total (Borra) Crítica',
+                    message: `Taxa de borra de ${(sludgeRate * 100).toFixed(1)}% na máquina ${entry.machineId} excede o limite de ${(limitSludge * 100)}%.`,
+                    severity: 'high',
+                    createdAt: Date.now(),
+                    isRead: false,
+                    relatedEntryId: entry.id
+                });
+            }
+
+            // Check 2: Refile (Scrap/Return) - MEDIUM SEVERITY
+            const scrapRate = refile / totalWeight;
+            if (scrapRate > limitScrap) {
+                const alertId = crypto.randomUUID();
+                await saveAlert({
+                    id: alertId,
+                    type: 'quality',
+                    title: 'Alto Volume de Retorno (Refile)',
+                    message: `Taxa de refile de ${(scrapRate * 100).toFixed(1)}% na máquina ${entry.machineId} excede o limite de ${(limitScrap * 100)}%.`,
+                    severity: 'medium',
+                    createdAt: Date.now(),
+                    isRead: false,
+                    relatedEntryId: entry.id
+                });
+            }
+        }
+    } 
+    // B) STANDARD LOGIC (Thermoforming etc)
+    else if (entry.qtyDefect > 0) {
+        const total = entry.qtyOK + entry.qtyDefect;
+        if (total === 0) return;
+
+        const defectRate = entry.qtyDefect / total;
+        
+        if (defectRate > limitScrap) {
+            const alertId = crypto.randomUUID();
+            await saveAlert({ 
+                id: alertId, 
+                type: 'quality', 
+                title: 'Refugo Alto Detectado', 
+                message: `Taxa de ${(defectRate * 100).toFixed(1)}% na máquina ${entry.machineId} excede o limite de ${(limitScrap * 100)}%.`, 
+                severity: 'high', 
+                createdAt: Date.now(), 
+                isRead: false, 
+                relatedEntryId: entry.id 
+            });
+        }
     }
 };
 
@@ -244,10 +296,13 @@ export const checkTimeOverlap = async (
     date: string, 
     start: string, 
     end: string, 
-    isDowntime: boolean,
+    isDowntime: boolean, // Ignorado na nova lógica (sobreposição é geral)
     excludeId?: string
 ): Promise<boolean> => {
     try {
+        // Validação Simplificada: (StartA < EndB) AND (EndA > StartB)
+        // Isso cobre qualquer tipo de intersecção de horário.
+        // Uma máquina não pode ter Produção e Parada ao mesmo tempo.
         let query = supabase
             .from('production_entries')
             .select('id')
@@ -256,18 +311,18 @@ export const checkTimeOverlap = async (
             .lt('start_time', end)
             .gt('end_time', start);
 
-        if (isDowntime) {
-            query = query.gt('downtime_minutes', 0);
-        } else {
-            query = query.or('downtime_minutes.eq.0,downtime_minutes.is.null');
-        }
-
+        // Se estiver editando, exclui o ID do próprio registro da busca
         if (excludeId) {
             query = query.neq('id', excludeId);
         }
 
         const { data, error } = await query;
-        if (error) throw error;
+        if (error) {
+            console.error("Erro na verificação de sobreposição:", error);
+            // Em caso de erro técnico, não bloqueia (fail-open), mas loga o erro.
+            return false; 
+        }
+        
         return data && data.length > 0;
     } catch (e) {
         return false; 
@@ -441,11 +496,12 @@ export const fetchDashboardStats = async (startDate: string, endDate: string): P
     try {
         // Parallel Fetch for Performance & Robustness
         // We fetch raw entries and master data to aggregate locally, avoiding reliance on specific DB RPCs.
-        const [entriesRes, productsRes, operatorsRes, downtimesRes] = await Promise.all([
+        const [entriesRes, productsRes, operatorsRes, downtimesRes, machinesRes] = await Promise.all([
             supabase.from('production_entries').select('*').gte('date', startDate).lte('date', endDate).order('start_time', { ascending: true }),
             supabase.from('products').select('code, name'),
             supabase.from('operators').select('id, name'),
-            supabase.from('downtime_types').select('id, description')
+            supabase.from('downtime_types').select('id, description'),
+            supabase.from('machines').select('code, sector') // Fetch Machines for Sector Mapping
         ]);
 
         if (entriesRes.error) throw entriesRes.error;
@@ -455,22 +511,45 @@ export const fetchDashboardStats = async (startDate: string, endDate: string): P
         const prodMap = new Map<any, string>(productsRes.data?.map((p: any) => [p.code, p.name]) || []);
         const opMap = new Map<any, string>(operatorsRes.data?.map((o: any) => [o.id, o.name]) || []);
         const dtMap = new Map<any, string>(downtimesRes.data?.map((d: any) => [d.id, d.description]) || []);
+        const machineSectorMap = new Map<string, string>(machinesRes.data?.map((m: any) => [m.code, m.sector]) || []);
 
-        // Aggregators
-        let totalProduced = 0;
-        let totalDefects = 0;
+        // Aggregators (Global)
         const productStats: Record<string, {ok: number, defect: number}> = {};
         const operatorStats: Record<string, {ok: number, defect: number}> = {};
         const shiftStats: Record<string, {ok: number, defect: number}> = {};
+
+        // Aggregators (Per Sector)
+        const extStats = { producedKg: 0, scrapKg: 0, entriesCount: 0 };
+        const tfStats = { producedUnits: 0, scrapUnits: 0, entriesCount: 0 };
 
         const processedEntries = entries.map((e: any) => {
             const qtyOK = Number(e.qty_ok) || 0;
             const qtyDefect = Number(e.qty_defect) || 0;
             
-            totalProduced += qtyOK;
-            totalDefects += qtyDefect;
+            const sector = machineSectorMap.get(e.machine_id) || 'Termoformagem'; // Default fallback
 
-            // Products
+            // 1. Sector Specific Logic
+            if (sector === 'Extrusão') {
+                // Extrusion Production is mainly measured in Kg (bobbin_weight)
+                const bobbinKg = e.meta_data?.bobbin_weight ? Number(e.meta_data.bobbin_weight) : 0;
+                // If bobbin_weight exists use it, otherwise fallback to qtyOK (if misconfigured but unlikely)
+                // Actually, Extrusion form saves Qty as Bobbins count, and Weight separately. 
+                // Dashboard asks for "Quantity Produced" in Kg usually for Extrusion.
+                extStats.producedKg += bobbinKg > 0 ? bobbinKg : 0; // Don't use qtyOK for Kg unless we assume 1unit=1kg? No.
+                
+                // Extrusion Scrap is Refile + Borra
+                const refile = e.meta_data?.extrusion?.refile ? Number(e.meta_data.extrusion.refile) : 0;
+                const borra = e.meta_data?.extrusion?.borra ? Number(e.meta_data.extrusion.borra) : 0;
+                extStats.scrapKg += (refile + borra);
+                extStats.entriesCount++;
+            } else {
+                // Termoformagem (Standard)
+                tfStats.producedUnits += qtyOK;
+                tfStats.scrapUnits += qtyDefect;
+                tfStats.entriesCount++;
+            }
+
+            // 2. Ranking Logic (Global - Unit based for simplicity in charts)
             const prodName = prodMap.get(e.product_code) || (e.product_code ? `Prod ${e.product_code}` : 'N/A');
             if (e.product_code) { // Only count if production
                 if (!productStats[prodName]) productStats[prodName] = { ok: 0, defect: 0 };
@@ -516,12 +595,27 @@ export const fetchDashboardStats = async (startDate: string, endDate: string): P
             machinesPayload = Object.entries(machineAgg).map(([name, total_qty]) => ({ name, total_qty }));
         }
 
+        // Calculate Quality Rates (Avoid division by zero)
+        const extTotal = extStats.producedKg + extStats.scrapKg;
+        const extQuality = extTotal > 0 ? (1 - (extStats.scrapKg / extTotal)) * 100 : 100;
+
+        const tfTotal = tfStats.producedUnits + tfStats.scrapUnits;
+        const tfQuality = tfTotal > 0 ? (1 - (tfStats.scrapUnits / tfTotal)) * 100 : 100;
+
         return {
-            kpis: {
-                produced: totalProduced,
-                defects: totalDefects,
-                entriesCount: entries.length,
-                efficiency: 0
+            sectorStats: {
+                extrusion: {
+                    producedKg: extStats.producedKg,
+                    scrapKg: extStats.scrapKg,
+                    entriesCount: extStats.entriesCount,
+                    qualityRate: extQuality
+                },
+                thermoforming: {
+                    producedUnits: tfStats.producedUnits,
+                    scrapUnits: tfStats.scrapUnits,
+                    entriesCount: tfStats.entriesCount,
+                    qualityRate: tfQuality
+                }
             },
             products: Object.entries(productStats).map(([name, s]) => ({ name, ...s })).sort((a,b) => b.ok - a.ok).slice(0, 10),
             operators: Object.entries(operatorStats).map(([name, s]) => ({ name, ...s })).sort((a,b) => b.ok - a.ok),

@@ -248,7 +248,7 @@ const BOMPage: React.FC = () => {
                                                         
                                                         return (
                                                             <tr key={item.id} className="hover:bg-slate-50 group">
-                                                                <td className="px-2 py-2 font-medium text-slate-800">{item.material?.name}</td>
+                                                                <td className="px-2 py-2 font-medium text-slate-800 text-xs">{item.material?.name}</td>
                                                                 <td className="px-2 py-2 font-mono text-slate-700">{item.quantityRequired}</td>
                                                                 <td className="px-2 py-2 text-slate-500 text-xs">{item.material?.unit}</td>
                                                                 <td className="px-2 py-2 text-right font-mono text-xs text-slate-600">

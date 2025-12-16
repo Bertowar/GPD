@@ -255,15 +255,41 @@ export const processStockTransaction = async (trx: Omit<InventoryTransaction, 'i
 
     // TRANSACTION ATTEMPT (MANUAL ROLLBACK PATTERN)
     // 1. Log Transaction
-    const { data: insertedTrx, error: trxError } = await supabase.from('inventory_transactions').insert([{
+    const payload = {
         material_id: trx.materialId,
         type: trx.type,
         quantity: trx.quantity,
         related_entry_id: trx.relatedEntryId,
         notes: trx.notes || null 
-    }]).select('id').single();
+    };
 
-    if (trxError || !insertedTrx) throw new Error(`Erro ao registrar histórico: ${formatError(trxError)}`);
+    // Initial insert attempt
+    let insertResult = await supabase.from('inventory_transactions').insert([payload]).select('id').single();
+
+    // Robust Fallback: Schema Drift Check
+    if (insertResult.error) {
+        // CODE 42703: Undefined Column (Fix for "notes" error)
+        const isColumnError = insertResult.error.code === 'PGRST204' || 
+                              insertResult.error.code === '42703' || 
+                              insertResult.error.message.includes('notes') || 
+                              insertResult.error.message.includes('column');
+        
+        if (isColumnError) {
+            console.warn("Schema Drift: Coluna 'notes' ausente. Tentando salvar sem ela.", insertResult.error.message);
+            const legacyPayload = { ...payload };
+            delete (legacyPayload as any).notes;
+            insertResult = await supabase.from('inventory_transactions').insert([legacyPayload]).select('id').single();
+        }
+    }
+
+    const { data: insertedTrx, error: trxError } = insertResult;
+
+    if (trxError || !insertedTrx) {
+        // Fallback error detail
+        const errMsg = formatError(trxError);
+        console.error("Falha ao registrar transação no estoque:", errMsg);
+        throw new Error(`Erro ao registrar histórico: ${errMsg}`);
+    }
 
     // 2. Update Stock
     try {
@@ -271,7 +297,7 @@ export const processStockTransaction = async (trx: Omit<InventoryTransaction, 'i
         if (updError) throw updError;
     } catch (e: any) {
         // ROLLBACK: Delete the transaction log if stock update failed
-        console.error("Transação falhou, revertendo...", e);
+        console.error("Transação falhou na atualização de saldo, revertendo...", e);
         await supabase.from('inventory_transactions').delete().eq('id', insertedTrx.id);
         throw new Error(`Erro ao atualizar saldo: ${formatError(e)}`); 
     }
@@ -308,8 +334,8 @@ export const processStockDeduction = async (entry: { productCode?: number | null
 /**
  * AUTOMATED SCRAP GENERATION (Aparas)
  * Calculates and returns scrap to inventory based on production process.
- * - Extrusion: 15% of Input
- * - Thermoforming: 35% of Processed Material
+ * - Extrusion: Uses EXPLICIT 'refile' input. 'Borra' is ignored (Loss).
+ * - Thermoforming: 35% of Processed Material (Skeleton/Web).
  */
 export const processScrapGeneration = async (entry: ProductionEntry): Promise<void> => {
     // 1. Validate
@@ -321,47 +347,38 @@ export const processScrapGeneration = async (entry: ProductionEntry): Promise<vo
 
     if (!product || !product.scrap_recycling_material_id || !machine) return;
 
-    // 3. Determine Factor & Logic based on Sector
-    let factor = 0;
-    let weightKg = 0;
-
-    const totalQty = (entry.qtyOK || 0) + (entry.qtyDefect || 0);
-    if (totalQty <= 0) return;
-
-    // Measured Weight from form overrides DB weight if present
-    const unitWeight = entry.metaData?.measuredWeight || product.net_weight || 0;
+    // 3. Determine Amount to Return
+    let scrapQty = 0;
 
     if (machine.sector === 'Extrusão') {
-        factor = 0.15; // 15% Return
-        // In Extrusion, product unit is usually 'kg', so Qty IS the Weight
-        if (product.unit === 'kg') {
-            weightKg = totalQty;
-        } else {
-            // Fallback if configured as 'un'
-            weightKg = (totalQty * unitWeight) / 1000;
+        // EXTRUSION LOGIC: Explicit Refile Input
+        const extData = entry.metaData?.extrusion;
+        if (extData && extData.refile > 0) {
+            scrapQty = Number(extData.refile);
+            // Note: 'Borra' (Dregs) is considered total loss/waste, so it is NOT returned to inventory.
         }
     } 
     else if (machine.sector === 'Termoformagem') {
-        factor = 0.35; // 35% Return (Skeleton/Web)
-        // In TF, unit is 'un', weight is grams. Convert to kg.
-        weightKg = (totalQty * unitWeight) / 1000;
+        // THERMOFORMING LOGIC: Calculated Percentage
+        const totalQty = (entry.qtyOK || 0) + (entry.qtyDefect || 0);
+        if (totalQty > 0) {
+            const unitWeight = entry.metaData?.measuredWeight || product.net_weight || 0;
+            const factor = 0.35; // 35% Return (Skeleton/Web)
+            // In TF, unit is 'un', weight is grams. Convert to kg.
+            const weightKg = (totalQty * unitWeight) / 1000;
+            scrapQty = weightKg * factor;
+        }
     } 
-    else {
-        return; // Other sectors don't generate automatic scrap return via this logic
-    }
 
-    if (weightKg <= 0) return;
+    if (scrapQty <= 0) return;
 
-    // 4. Calculate Scrap Amount
-    const scrapQty = weightKg * factor;
-
-    // 5. Execute Transaction
+    // 4. Execute Transaction
     try {
         await processStockTransaction({
             materialId: product.scrap_recycling_material_id,
             type: 'IN',
             quantity: parseFloat(scrapQty.toFixed(3)),
-            notes: `Retorno Auto (${(factor * 100).toFixed(0)}%) - ${machine.sector} - OP/Reg #${entry.id.substring(0, 8)}`,
+            notes: `Retorno ${machine.sector} - OP/Reg #${entry.id.substring(0, 8)}`,
             relatedEntryId: entry.id
         });
         console.log(`[System] Aparas geradas: ${scrapQty.toFixed(2)}kg (${product.scrap_recycling_material_id})`);
@@ -393,7 +410,7 @@ export const fetchShippingItems = async (orderId: string): Promise<ShippingItem[
     } catch(e) { return []; }
 };
 export const saveShippingItem = async (item: Omit<ShippingItem, 'product'>): Promise<void> => { const { error } = await supabase.from('shipping_items').insert([{ order_id: item.orderId, product_code: item.productCode, quantity: item.quantity }]); if(error) throw error; };
-export const deleteShippingItem = async (id: string): Promise<void> => { const { error } = await supabase.from('shipping_items').delete().eq('id', id); if(error) throw error; };
+export const deleteShippingItem = async (id: string): Promise<void> => { const { error } = await supabase.from('shipping_items').delete().eq('id', id); if (error) throw error; };
 
 // --- PRODUCT COSTS SUMMARY (MATERIALIZED VIEW) ---
 

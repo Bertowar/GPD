@@ -1,7 +1,5 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchProductCosts, fetchAllBOMs, saveProduct } from '../services/storage';
+import { fetchProductCosts, fetchAllBOMs, updateProductPrice, formatError } from '../services/storage';
 import { ProductCostSummary, ProductBOM, MaterialCategory } from '../types';
 import { DollarSign, Search, Loader2, Save, TrendingUp, TrendingDown, PieChart, List, X, Box, Zap, User, Hammer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PieChart as RePieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -46,7 +44,7 @@ const FinancialPage: React.FC = () => {
     }, [costData]);
 
     const filteredData = enhancedData.filter(d => 
-        d.productName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (d.productName && d.productName.toLowerCase().includes(searchTerm.toLowerCase())) || 
         d.productCode.toString().includes(searchTerm)
     );
 
@@ -63,10 +61,13 @@ const FinancialPage: React.FC = () => {
         // Update Local
         setCostData(prev => prev.map(c => c.productCode === code ? { ...c, sellingPrice: val } : c));
         
-        // Save DB (Updates product table, trigger updates view)
+        // Save DB
         try {
-            await saveProduct({ codigo: code, sellingPrice: val } as any);
-        } catch (e) { console.error("Erro ao salvar preço", e); }
+            await updateProductPrice(code, val);
+        } catch (e: any) { 
+            console.error("Erro ao salvar preço", e);
+            alert(`Erro ao salvar preço: ${formatError(e)}`);
+        }
     };
 
     const getCategoryIcon = (cat?: MaterialCategory) => {

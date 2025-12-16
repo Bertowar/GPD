@@ -152,8 +152,11 @@ const DetailsModal: React.FC<DetailsModalProps> = ({ isOpen, onClose, group, pro
                                 
                                 // Calculate Process Weight for individual entry (Theoretical)
                                 const product = products.find(p => p.codigo === e.productCode);
+                                
+                                // NEW LOGIC: Only calculate theoretical for Finished Goods (TF)
+                                const isFinished = product?.type === 'FINISHED';
                                 const unitWeight = e.metaData?.measuredWeight || product?.pesoLiquido || 0;
-                                const processWeight = !isDowntime ? (unitWeight * e.qtyOK) : 0;
+                                const processWeight = !isDowntime && isFinished ? (unitWeight * e.qtyOK) : 0;
 
                                 return (
                                     <tr key={e.id} className="hover:bg-slate-50">
@@ -371,11 +374,15 @@ const ProductionList: React.FC = () => {
             // --- WEIGHT CALCULATIONS ---
             
             // 1. Process Weight (Theoretical based on Output)
-            // Priority: Measured Weight in Form > Product Spec Weight
             const product = products.find(p => p.codigo === entry.productCode);
-            const unitWeight = entry.metaData?.measuredWeight || product?.pesoLiquido || 0;
-            const entryTotalWeight = unitWeight * entry.qtyOK;
-            groups[key].totalProcessWeight += entryTotalWeight;
+            
+            // IMPORTANT: Only calculate theoretical weight for FINISHED goods.
+            // Extrusion (Intermediate/Bobbin) does not use this logic.
+            if (product?.type === 'FINISHED') {
+                const unitWeight = entry.metaData?.measuredWeight || product?.pesoLiquido || 0;
+                const entryTotalWeight = unitWeight * entry.qtyOK;
+                groups[key].totalProcessWeight += entryTotalWeight;
+            }
 
             // 2. Bobbin Weight (Actual Input based on Entries)
             // Extracted from form input 'bobbin_weight'
@@ -731,7 +738,7 @@ const ProductionList: React.FC = () => {
                                         </span>
                                     )}
 
-                                    {/* Secondary Info: Theoretical Process Weight (Comparison) */}
+                                    {/* Secondary Info: Theoretical Process Weight (Comparison) - ONLY FOR FINISHED PRODUCTS */}
                                     {g.totalProcessWeight > 0 && (
                                         <span className="text-[10px] text-slate-400 font-medium mt-0.5" title="Peso Teórico (Qtd * Peso Médio/Ficha)">
                                             Teór: {g.totalProcessWeight.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}kg

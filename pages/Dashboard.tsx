@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  PieChart, Pie, Cell, ComposedChart 
+  PieChart, Pie, Cell
 } from 'recharts';
-import { Package, AlertTriangle, TrendingUp, Clock, Loader2, Cpu, Users, Sun, Calendar, BarChart3, Timer, Recycle, XCircle, Filter } from 'lucide-react';
+import { Package, AlertTriangle, TrendingUp, Clock, Loader2, Cpu, Users, Sun, Calendar, Recycle, XCircle, Filter, Weight, Layers } from 'lucide-react';
 import { useDashboardStats, useDowntimeTypes, useMachines } from '../hooks/useQueries';
 
 const COLORS = ['#0ea5e9', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6'];
@@ -35,11 +35,7 @@ const Dashboard: React.FC = () => {
       const start = new Date(selectedDate);
       
       if (viewMode === 'day') {
-          // Contexto do dia selecionado (mostra o próprio dia e talvez anteriores recentes se necessário, mas aqui focamos no dia)
-          // Ajuste: para ver exatamente o dia, start e end são iguais ou small range.
-          // Mantendo lógica anterior de contexto de 3 dias para Gantt ficar rico, ou mudando para exato.
-          // Vamos focar no dia selecionado para filtro ser preciso conforme pedido.
-          // start.setDate(end.getDate() - 2); // Removido para filtro estrito quando selecionado
+          // Single day context
       } else if (viewMode === 'week') {
           end.setDate(start.getDate() + 7);
       } else {
@@ -53,9 +49,7 @@ const Dashboard: React.FC = () => {
 
   // Fetch Logic (React Query)
   const { data, isLoading: loading } = useDashboardStats(startDate, endDate);
-  const { data: downtimeTypes } = useDowntimeTypes();
-  const { data: machinesList = [] } = useMachines();
-
+  
   // --- RENDERING HELPERS ---
 
   // Transform Server-Side simplified Gantt data into Visual Structure
@@ -65,11 +59,9 @@ const Dashboard: React.FC = () => {
       // Group flat events by machine+date
       const rowMap: Record<string, any> = {};
       
-      // Fix: Ensure data.machines is an array before iterating
       (data.machines || []).forEach((e: any) => {
           const key = `${e.machine_id}|${e.date}`;
           if (!rowMap[key]) {
-              // Format Date
               const dateObj = new Date(e.date);
               const dateStr = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth()+1).toString().padStart(2, '0')}`;
               
@@ -116,36 +108,8 @@ const Dashboard: React.FC = () => {
 
   }, [data]);
 
-  const kpis = useMemo(() => {
-      if (!data) return { produced: 0, defects: 0, rate: 0, entriesCount: 0 };
-      const total = data.kpis.produced + data.kpis.defects;
-      const rate = total > 0 ? (data.kpis.defects / total) * 100 : 0;
-      return { ...data.kpis, rate };
-  }, [data]);
-
-  // NEW: Calculate TF Production specifically (Robust Check)
-  const tfProductionTotal = useMemo(() => {
-      if (!data || !data.machines) return 0;
-      
-      return (data.machines as any[]).reduce((acc, item) => {
-          // Determine ID from event or aggregate
-          const id = item.machine_id || item.name || '';
-          
-          // 1. Check against Machine Registry (Best for Sector accuracy)
-          const machineDef = machinesList.find(m => m.code === id);
-          if (machineDef) {
-              if (machineDef.sector === 'Termoformagem') {
-                  return acc + (Number(item.qty_ok) || Number(item.total_qty) || 0);
-              }
-          } 
-          // 2. Fallback: Check ID Prefix (if machine not found in list)
-          else if (id.toString().toUpperCase().startsWith('TF')) {
-              return acc + (Number(item.qty_ok) || Number(item.total_qty) || 0);
-          }
-          
-          return acc;
-      }, 0);
-  }, [data, machinesList]);
+  const extStats = data?.sectorStats?.extrusion || { producedKg: 0, scrapKg: 0, qualityRate: 100, entriesCount: 0 };
+  const tfStats = data?.sectorStats?.thermoforming || { producedUnits: 0, scrapUnits: 0, qualityRate: 100, entriesCount: 0 };
 
   if (loading) {
     return (
@@ -167,7 +131,6 @@ const Dashboard: React.FC = () => {
                     : 'Capacidade Produtiva (Consolidado)'}
             </h3>
             
-            {/* Show view options only if date is selected */}
             {selectedDate && (
                 <div className="flex items-center gap-4">
                     <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -291,48 +254,112 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-slate-500">Caixas Produzidas (TFs)</p>
-                    <p className="text-2xl font-bold text-slate-800">{tfProductionTotal.toLocaleString()}</p>
+      {/* --- SEÇÃO EXTRUSÃO --- */}
+      <div className="space-y-2 animate-in fade-in slide-in-from-left-4">
+          <div className="flex items-center space-x-2 border-b border-blue-200 pb-2">
+              <div className="bg-blue-100 p-1.5 rounded">
+                  <Cpu size={18} className="text-blue-700"/>
+              </div>
+              <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wide">Setor Extrusão</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-8 -mt-8"></div>
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Bobinas (Produção)</p>
+                        <p className="text-2xl font-bold text-slate-800">{extStats.producedKg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-medium text-slate-400">kg</span></p>
+                    </div>
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><Weight size={20} /></div>
                 </div>
-                <div className="p-3 bg-blue-50 rounded-lg text-blue-600"><Package size={24} /></div>
             </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-slate-500">Retorno Material</p>
-                    <p className="text-2xl font-bold text-slate-800">{kpis.defects.toLocaleString()}</p>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Perda / Retorno</p>
+                        <p className="text-2xl font-bold text-slate-800">{extStats.scrapKg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-medium text-slate-400">kg</span></p>
+                    </div>
+                    <div className="p-2 bg-orange-50 rounded-lg text-orange-600"><Recycle size={20} /></div>
                 </div>
-                <div className="p-3 bg-orange-50 rounded-lg text-orange-600"><Recycle size={24} /></div>
             </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-slate-500">Índice de Qualidade</p>
-                    <p className={`text-2xl font-bold ${kpis.rate > 5 ? 'text-red-600' : 'text-green-600'}`}>{(100 - kpis.rate).toFixed(2)}%</p>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Qualidade (Peso)</p>
+                        <p className={`text-2xl font-bold ${extStats.qualityRate < 95 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {extStats.qualityRate.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="p-2 bg-green-50 rounded-lg text-green-600"><TrendingUp size={20} /></div>
                 </div>
-                <div className="p-3 bg-green-50 rounded-lg text-green-600"><TrendingUp size={24} /></div>
             </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-slate-500">Registros</p>
-                    <p className="text-2xl font-bold text-slate-800">{data.kpis.entriesCount}</p>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Apontamentos</p>
+                        <p className="text-2xl font-bold text-slate-800">{extStats.entriesCount}</p>
+                    </div>
+                    <div className="p-2 bg-purple-50 rounded-lg text-purple-600"><Clock size={20} /></div>
                 </div>
-                <div className="p-3 bg-purple-50 rounded-lg text-purple-600"><Clock size={24} /></div>
             </div>
-        </div>
+          </div>
+      </div>
+
+      {/* --- SEÇÃO TERMOFORMAGEM --- */}
+      <div className="space-y-2 animate-in fade-in slide-in-from-right-4">
+          <div className="flex items-center space-x-2 border-b border-orange-200 pb-2">
+              <div className="bg-orange-100 p-1.5 rounded">
+                  <Package size={18} className="text-orange-700"/>
+              </div>
+              <h3 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Setor Termoformagem</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-orange-50 rounded-bl-full -mr-8 -mt-8"></div>
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Caixas (Produção)</p>
+                        <p className="text-2xl font-bold text-slate-800">{tfStats.producedUnits.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">un</span></p>
+                    </div>
+                    <div className="p-2 bg-orange-50 rounded-lg text-orange-600"><Layers size={20} /></div>
+                </div>
+            </div>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Refugo (Peças)</p>
+                        <p className="text-2xl font-bold text-slate-800">{tfStats.scrapUnits.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="p-2 bg-red-50 rounded-lg text-red-600"><AlertTriangle size={20} /></div>
+                </div>
+            </div>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Qualidade (Qtd)</p>
+                        <p className={`text-2xl font-bold ${tfStats.qualityRate < 95 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {tfStats.qualityRate.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="p-2 bg-green-50 rounded-lg text-green-600"><TrendingUp size={20} /></div>
+                </div>
+            </div>
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Apontamentos</p>
+                        <p className="text-2xl font-bold text-slate-800">{tfStats.entriesCount}</p>
+                    </div>
+                    <div className="p-2 bg-purple-50 rounded-lg text-purple-600"><Clock size={20} /></div>
+                </div>
+            </div>
+          </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 border-b border-slate-200 overflow-x-auto pb-1">
+      <div className="flex space-x-1 border-b border-slate-200 overflow-x-auto pb-1 mt-4">
         {[
             {id: 'machines', icon: Cpu, label: 'Máquinas'},
             {id: 'products', icon: Package, label: 'Produtos'},

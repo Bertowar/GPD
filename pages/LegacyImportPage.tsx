@@ -452,7 +452,7 @@ const LegacyImportPage: React.FC = () => {
     const filterData = (data: ReportItem[]) => {
         return data.filter(item => {
             const matchId = !filters.id || item.ID.includes(filters.id);
-            const matchRef = !filters.ref || item.REFERENCIA.toLowerCase().includes(filters.ref.toLowerCase());
+            const matchRef = !filters.ref || (item.REFERENCIA && item.REFERENCIA.toLowerCase().includes(filters.ref.toLowerCase()));
             return matchId && matchRef;
         });
     };
@@ -460,7 +460,7 @@ const LegacyImportPage: React.FC = () => {
     const filterConsolidated = (data: ConsolidatedItem[]) => {
         return data.filter(item => {
             const matchId = !filters.id || item.id.includes(filters.id);
-            const matchRef = !filters.ref || item.reference.toLowerCase().includes(filters.ref.toLowerCase());
+            const matchRef = !filters.ref || (item.reference && item.reference.toLowerCase().includes(filters.ref.toLowerCase()));
             const matchCategory = !selectedCategoryFilter || item.category === selectedCategoryFilter;
             return matchId && matchRef && matchCategory;
         });
@@ -468,7 +468,7 @@ const LegacyImportPage: React.FC = () => {
 
     // Apply filters to Product Summary (Tab D) 
     const filteredProductSummary = productSummaryData.filter(item => {
-        const matchRef = !filters.ref || item.reference.toLowerCase().includes(filters.ref.toLowerCase());
+        const matchRef = !filters.ref || (item.reference && item.reference.toLowerCase().includes(filters.ref.toLowerCase()));
         // Added ID filter for Tab D as well since we have a dedicated column now
         const matchId = !filters.id || item.nobreId.includes(filters.id);
         return matchRef && matchId;

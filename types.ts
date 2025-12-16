@@ -155,11 +155,19 @@ export interface DashboardMetrics {
 
 // NEW: Interface agregada para o Dashboard v2 (RPC)
 export interface DashboardSummary {
-    kpis: {
-        produced: number;
-        defects: number;
-        entriesCount: number;
-        efficiency: number; 
+    sectorStats: {
+        extrusion: {
+            producedKg: number;
+            scrapKg: number; // Refile + Borra
+            entriesCount: number;
+            qualityRate: number;
+        };
+        thermoforming: {
+            producedUnits: number;
+            scrapUnits: number;
+            entriesCount: number;
+            qualityRate: number;
+        };
     };
     products: { name: string; ok: number; defect: number }[];
     operators: { name: string; ok: number; defect: number }[];
@@ -185,11 +193,16 @@ export interface AppSettings {
   shiftHours: number;
   efficiencyTarget: number; // %
   maintenanceMode: boolean; 
+  
   // NOVAS REGRAS DE VALIDAÇÃO
   requireScrapReason: boolean;      // Exigir motivo se refugo > 0
   blockExcessProduction: boolean;   // Bloquear se qtd > capacidade teórica
   requireDowntimeNotes: boolean;    // Exigir observação em paradas
   enableProductionOrders: boolean;  // Habilitar módulo de Ordens de Produção
+  
+  // LIMITES DE QUALIDADE (ALERTAS)
+  maxScrapRate?: number;  // % Máxima para Refile/Aparas/Refugo (Retorno)
+  maxSludgeRate?: number; // % Máxima para Borra (Perda Total)
 }
 
 export interface WorkShift {

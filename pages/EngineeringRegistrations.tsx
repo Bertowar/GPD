@@ -346,7 +346,7 @@ const ProductForm: React.FC<{ onSave: () => void; initialData?: Product }> = ({ 
                     className="px-3 py-2 border rounded-lg bg-white text-xs"
                 >
                     <option value="">- Nenhuma recuperação -</option>
-                    {materials.filter(m => m.category === 'raw_material').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    {materials.filter(m => m.category === 'raw_material' || m.category === 'return').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
             </div>
 
@@ -554,7 +554,7 @@ const DowntimeForm: React.FC<{ onSave: () => void; initialData?: DowntimeType }>
                         type="checkbox" 
                         id="exempt_op" 
                         checked={exempt} 
-                        onChange={e => setExempt(e.target.checked)} 
+                        onChange={e => setExempt(e.target.value)} 
                         className="w-4 h-4 text-brand-600 rounded focus:ring-brand-500"
                     />
                     <label htmlFor="exempt_op" className="ml-2 text-sm font-bold text-slate-700 cursor-pointer">
@@ -961,7 +961,7 @@ const EngineeringRegistrations: React.FC = () => {
               <input 
                   type="text" 
                   placeholder={`Buscar em ${activeTab}...`} 
-                  className="w-full pl-9 pr-8 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-200 transition-all bg-white"
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200 transition-all bg-white"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
               />
@@ -977,8 +977,8 @@ const EngineeringRegistrations: React.FC = () => {
         {activeTab === 'machines' && <SimpleTable<Machine>
           data={machines.filter(m => 
              !searchTerm || 
-             m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-             m.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
+             (m.code && m.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
              (m.sector || '').toLowerCase().includes(searchTerm.toLowerCase())
           )}
           columns={[
@@ -995,7 +995,7 @@ const EngineeringRegistrations: React.FC = () => {
 
         {activeTab === 'sectors' && <SimpleTable<Sector>
           data={sectors.filter(s => 
-             !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase())
+             !searchTerm || (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase()))
           )}
           columns={[
             { header: 'Nome', render: (s: Sector) => <span className="font-bold text-slate-800">{s.name}</span> },
@@ -1041,9 +1041,9 @@ const EngineeringRegistrations: React.FC = () => {
         {activeTab === 'products' && <SimpleTable<Product>
           data={products.filter(p => 
              !searchTerm || 
-             p.produto.toLowerCase().includes(searchTerm.toLowerCase()) || 
+             (p.produto && p.produto.toLowerCase().includes(searchTerm.toLowerCase())) || 
              p.codigo.toString().includes(searchTerm) || 
-             p.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+             (p.descricao && p.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
           )}
           columns={[
             { header: 'Cód', render: (p: Product) => <span className="font-mono text-xs">{p.codigo}</span> },
@@ -1095,8 +1095,8 @@ const EngineeringRegistrations: React.FC = () => {
         {activeTab === 'categories' && <SimpleTable<ProductCategory>
            data={categories.filter(c => 
               !searchTerm || 
-              c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-              c.id.toLowerCase().includes(searchTerm.toLowerCase())
+              (c.name && c.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
+              (c.id && c.id.toLowerCase().includes(searchTerm.toLowerCase()))
            )}
            columns={[
              { header: 'ID / Chave', render: (c: ProductCategory) => <span className="text-slate-400 font-mono text-xs">{c.id}</span> },
@@ -1110,7 +1110,7 @@ const EngineeringRegistrations: React.FC = () => {
         {activeTab === 'operators' && <SimpleTable<Operator>
            data={operators.filter(o => 
               !searchTerm || 
-              o.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+              (o.name && o.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
               (o.sector || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
               (o.role || '').toLowerCase().includes(searchTerm.toLowerCase())
            )}
@@ -1136,7 +1136,7 @@ const EngineeringRegistrations: React.FC = () => {
 
         {activeTab === 'shifts' && <SimpleTable<WorkShift>
             data={workShifts.filter(s => 
-               !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase())
+               !searchTerm || (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase()))
             )}
             columns={[
                 { header: 'Nome', render: (s: WorkShift) => <span className="font-bold text-slate-800">{s.name}</span> },
@@ -1152,8 +1152,8 @@ const EngineeringRegistrations: React.FC = () => {
         {activeTab === 'downtime' && <SimpleTable<DowntimeType>
            data={downtimeTypes.filter(d => 
               !searchTerm || 
-              d.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-              d.id.toLowerCase().includes(searchTerm.toLowerCase())
+              (d.description && d.description.toLowerCase().includes(searchTerm.toLowerCase())) || 
+              (d.id && d.id.toLowerCase().includes(searchTerm.toLowerCase()))
            )}
            columns={[
              { header: 'Código', render: (d: DowntimeType) => <span className="font-mono font-bold bg-slate-100 px-2 py-1 rounded">{d.id}</span> },
@@ -1168,7 +1168,7 @@ const EngineeringRegistrations: React.FC = () => {
 
         {activeTab === 'scrap' && <SimpleTable<ScrapReason>
            data={scrapReasons.filter(s => 
-              !searchTerm || s.description.toLowerCase().includes(searchTerm.toLowerCase())
+              !searchTerm || (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()))
            )}
            columns={[
              { header: 'Descrição', render: (s: ScrapReason) => s.description },

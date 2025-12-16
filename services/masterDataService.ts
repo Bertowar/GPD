@@ -24,7 +24,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     requireScrapReason: true,
     blockExcessProduction: false,
     requireDowntimeNotes: false,
-    enableProductionOrders: true
+    enableProductionOrders: true,
+    maxScrapRate: 5, // 5% for Return/Refile
+    maxSludgeRate: 2 // 2% for Sludge/Borra
 };
 
 export const fetchSettings = async (): Promise<AppSettings> => {
@@ -38,7 +40,9 @@ export const fetchSettings = async (): Promise<AppSettings> => {
       requireScrapReason: data.require_scrap_reason ?? true,
       blockExcessProduction: data.block_excess_production ?? false,
       requireDowntimeNotes: data.require_downtime_notes ?? false,
-      enableProductionOrders: data.enable_production_orders ?? true
+      enableProductionOrders: data.enable_production_orders ?? true,
+      maxScrapRate: data.max_scrap_rate ?? 5,
+      maxSludgeRate: data.max_sludge_rate ?? 2
     };
   } catch (e) { return DEFAULT_SETTINGS; }
 };
@@ -53,6 +57,8 @@ export const saveSettings = async (settings: AppSettings): Promise<void> => {
     require_downtime_notes: settings.requireDowntimeNotes,
     enable_production_orders: settings.enableProductionOrders,
     maintenance_mode: settings.maintenanceMode,
+    max_scrap_rate: settings.maxScrapRate,
+    max_sludge_rate: settings.maxSludgeRate,
     updated_at: new Date().toISOString()
   };
 
@@ -70,7 +76,7 @@ export const saveSettings = async (settings: AppSettings): Promise<void> => {
         };
         const { error: legacyError } = await supabase.from('app_settings').upsert([legacySettings]);
         if (legacyError) throw legacyError;
-        throw new Error("AVISO_SCHEMA: Salvo parcialmente. Execute 'supabase_schema.sql' no banco para habilitar todos os recursos.");
+        throw new Error("AVISO_SCHEMA: Salvo parcialmente. Parâmetros de alerta (Borra/Refile) não persistidos. Execute 'supabase_schema.sql'.");
     }
     throw error;
   }
@@ -217,6 +223,16 @@ export const updateProductTarget = async (code: number, itemsPerHour: number): P
     const { error } = await supabase.from('products').update({ items_per_hour: target }).eq('code', code);
     if (error && (error.code === 'PGRST204' || error.message.includes('Could not find'))) return;
     if (error) throw error;
+};
+
+export const updateProductPrice = async (code: number, price: number): Promise<void> => {
+    const safePrice = isNaN(price) ? 0 : Number(price);
+    const { error } = await supabase.from('products').update({ selling_price: safePrice }).eq('code', code);
+    if (error) {
+        // Ignore if column doesn't exist (legacy schema support)
+        if (error.code === 'PGRST204' || error.message.includes('Could not find')) return;
+        throw error;
+    }
 };
 
 export const adjustProductStock = async (code: number, newQuantity: number): Promise<void> => {

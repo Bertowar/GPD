@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, AlertCircle, Plus, Trash2, Sliders, AlertTriangle, ShieldCheck, Target, ClipboardList } from 'lucide-react';
+import { Save, Loader2, AlertCircle, Plus, Trash2, Sliders, AlertTriangle, ShieldCheck, Target, ClipboardList, Gauge } from 'lucide-react';
 import { fetchSettings, saveSettings, fetchFieldDefinitions, saveFieldDefinition, deleteFieldDefinition, formatError } from '../services/storage';
 import { AppSettings, FieldDefinition } from '../types';
 import { Input } from '../components/Input';
@@ -18,7 +17,9 @@ const SettingsPage: React.FC = () => {
     requireScrapReason: true,
     blockExcessProduction: false,
     requireDowntimeNotes: false,
-    enableProductionOrders: true
+    enableProductionOrders: true,
+    maxScrapRate: 5,
+    maxSludgeRate: 2
   });
 
   // Custom Fields State
@@ -174,6 +175,37 @@ const SettingsPage: React.FC = () => {
                         checked={settings.enableProductionOrders}
                         onChange={val => setSettings({...settings, enableProductionOrders: val})}
                     />
+                </div>
+              </div>
+
+              {/* Parâmetros de Qualidade / Alertas */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center space-x-2 mb-6 text-slate-800 border-b border-slate-100 pb-4">
+                    <Gauge className="text-brand-600" />
+                    <h3 className="text-lg font-bold">Parâmetros de Qualidade & Alertas</h3>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-6">
+                    <div>
+                        <Input 
+                            label="Limite Máx. Refile/Retorno (%)" 
+                            type="number" 
+                            step="0.1" 
+                            value={settings.maxScrapRate || 5} 
+                            onChange={e => setSettings({...settings, maxScrapRate: Number(e.target.value)})}
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">Gera alerta de "Alto Volume de Retorno" acima deste valor.</p>
+                    </div>
+                    <div>
+                        <Input 
+                            label="Limite Máx. Borra/Perda Total (%)" 
+                            type="number" 
+                            step="0.1" 
+                            value={settings.maxSludgeRate || 2} 
+                            onChange={e => setSettings({...settings, maxSludgeRate: Number(e.target.value)})}
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">Gera alerta crítico de "Perda Total (Borra)" acima deste valor.</p>
+                    </div>
                 </div>
               </div>
 

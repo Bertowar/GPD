@@ -130,7 +130,9 @@ const InventoryPage: React.FC = () => {
         
         // Filter first
         const filtered = materials.filter(m => {
-            const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.code.toLowerCase().includes(searchTerm.toLowerCase()) || (m.group || '').toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
+                                  (m.code && m.code.toLowerCase().includes(searchTerm.toLowerCase())) || 
+                                  (m.group || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchesCat = activeCategory === 'ALL' || m.category === activeCategory;
             const matchesActive = showInactive ? true : m.active !== false; // Filter Inactive if toggle is off
             return matchesSearch && matchesCat && matchesActive;
@@ -169,7 +171,7 @@ const InventoryPage: React.FC = () => {
                 // Inactive items at bottom
                 if (a.active !== false && b.active === false) return -1;
                 if (a.active === false && b.active !== false) return 1;
-                return a.name.localeCompare(b.name);
+                return (a.name || '').localeCompare(b.name || '');
             });
     }, [materials, selectedGroup, showInactive]);
 

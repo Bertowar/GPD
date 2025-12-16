@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchMaterials, processStockTransaction, formatError, fetchProducts, fetchAllBOMs, adjustProductStock } from '../services/storage';
 import { RawMaterial, MaterialCategory, Product, ProductBOM } from '../types';
@@ -83,17 +81,17 @@ const InventoryAuditPage: React.FC = () => {
     const filteredItems = useMemo(() => {
         if (viewContext === 'PRODUCTS') {
             return products.filter(p => 
-                p.produto.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                (p.produto && p.produto.toLowerCase().includes(searchTerm.toLowerCase())) || 
                 p.codigo.toString().includes(searchTerm)
             );
         } else {
             return materials.filter(m => {
-                const matchesSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.code.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesSearch = (m.name && m.name.toLowerCase().includes(searchTerm.toLowerCase())) || (m.code && m.code.toLowerCase().includes(searchTerm.toLowerCase()));
                 let matchesCategory = true;
                 if (activeFilter === 'raw_material') matchesCategory = m.category === 'raw_material';
                 if (activeFilter === 'packaging') matchesCategory = m.category === 'packaging';
                 return matchesSearch && matchesCategory;
-            }).sort((a, b) => a.name.localeCompare(b.name));
+            }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         }
     }, [materials, products, searchTerm, activeFilter, viewContext]);
 
